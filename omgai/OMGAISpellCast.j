@@ -95,6 +95,7 @@ library OMGAISpellCast requires OMGAICore, OMGAILog, OMGAIActionMask, OMGAITarge
 
     public function OMGAI_CastAbility takes unit u, integer abilityId, integer tt, unit target, real x, real y returns boolean
         local boolean ok = false
+        local real lbias = 0.0
         if u == null then
             return false
         endif
@@ -110,6 +111,11 @@ library OMGAISpellCast requires OMGAICore, OMGAILog, OMGAIActionMask, OMGAITarge
             call OMGAICore_OMGAI_SaveReal(GetHandleId(u), SLOT_SOFT_CD, OMGAICore_OMGAI_GetGameTime() + 0.15)
             call OMGAISpellCast_OMGAI_CastSuccess(u)
             call OMGAILearn_OMGAI_LearnOnCast(u, abilityId, target)
+            // v0.11: 自学习反馈——低分技能施放间隔惩罚（越证明无效越少放）
+            set lbias = OMGAILearn_OMGAI_LearnBiasForCast(u, abilityId)
+            if lbias < 0.0 then
+                call OMGAICore_OMGAI_SaveReal(GetHandleId(u), SLOT_SOFT_CD, OMGAICore_OMGAI_GetGameTime() + 0.5 - lbias * 10.0)
+            endif
             // 补发原命令（0.5s 后若 idle 则补攻击/移动）
             // TODO: TimerService 延迟回调 OMGAI_ReissueCommand(u)
             return true

@@ -212,6 +212,12 @@ library OMGAILearn requires OMGAICore, OMGAILog
         endif
         set bias = (sco - 50.0) / 100.0
         return bias
+
+    // v0.11: 施法决策查询——拼 key 返回 bias（供 SpellCast 消费）
+    public function OMGAI_LearnBiasForCast takes unit u, integer abilityId returns real
+        local string key = LEARN_MakeKey("hero", abilityId, OMGAILearn_OMGAI_LearnContext(u))
+        return OMGAILearn_OMGAI_LearnPriorityBias(key)
+    endfunction
     endfunction
 
 //---------------------------------------------------------------------------

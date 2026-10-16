@@ -145,25 +145,16 @@ constant integer LOG_LV_FATAL = 4
     endfunction
 
 //---------------------------------------------------------------------------
-// 6. 崩溃现场转储（§11.2）
-//    1) 最近 32 条日志 → gamecache
-//    2) AI 状态快照 → gamecache（由 OMGAIDispatcher/OMGAIEnemyState 填充）
-//    3) 关键信息 → KK 存档（OMGAILearn 提供，此处留钩子）
+// 5.3 V2.1: KK 平台事件上报（DzAPI_Map_SaveServerString，common.j 已声明）
+//    仅 KK 平台有效；非 KK 平台调用返回 false 不产生副作用
 //---------------------------------------------------------------------------
 
-    public function OMGAILog_DumpCrash takes nothing returns nothing
-        // 1) 日志转储
-        call OMGAILog_OMGAILog_DumpToCache(32)
-        // 2) 状态快照钩子
-        // TODO: call OMGAIEnemyState_DumpSnapshot()
-        // 3) KK 上报钩子
-        // TODO: call OMGAILearn_ReportCrash("OMGAI:crash:"+R2S(LOG_Now()))
-        // 4) 标记全局崩溃标志（OMGAICore GSLOT_CRASH_FLAG）
-        call OMGAICore_OMGAI_SaveGlobalInt(GSLOT_CRASH_FLAG, 1)
+    public function OMGAILog_ReportToKK takes string key, string evt returns nothing
+        call DzAPI_Map_SaveServerString(Player(0), key, evt)
     endfunction
 
 //---------------------------------------------------------------------------
-// 7. 查询（开发期 -log 指令用）
+// 6.0 查询（开发期 -log 指令用；须在 DumpCrash 之前定义）
 //---------------------------------------------------------------------------
 
     public function OMGAILog_GetRecent takes integer count returns string
@@ -184,6 +175,24 @@ constant integer LOG_LV_FATAL = 4
     endfunction
 
 //---------------------------------------------------------------------------
+// 6. 崩溃现场转储（§11.2）
+//    1) 最近 32 条日志 → gamecache
+//    2) AI 状态快照 → gamecache（由 OMGAIDispatcher/OMGAIEnemyState 填充）
+//    3) 关键信息 → KK 存档（OMGAILearn 提供，此处留钩子）
+//---------------------------------------------------------------------------
+
+    public function OMGAILog_DumpCrash takes nothing returns nothing
+        // 1) 日志转储（gamecache，跨局保留）
+        call OMGAILog_OMGAILog_DumpToCache(32)
+        // 2) 状态快照钩子
+        // TODO: call OMGAIEnemyState_DumpSnapshot()
+        // 3) KK 平台崩溃上报（V2.1：key=omgai_crash，value=时间+最近 16 条日志）
+        call OMGAILog_OMGAILog_ReportToKK("omgai_crash", "t=" + R2S(LOG_Now()) + "|" + OMGAILog_OMGAILog_GetRecent(16))
+        // 4) 标记全局崩溃标志（OMGAICore GSLOT_CRASH_FLAG）
+        call OMGAICore_OMGAI_SaveGlobalInt(GSLOT_CRASH_FLAG, 1)
+    endfunction
+
+//---------------------------------------------------------------------------
 // 8. 与 OMGAICore 的越界告警钩子对接
 //    OMGAICore.OMGAI_ArrGuardWarn 的 TODO 由本库实现：WARN 日志
 //    （注意：OMGAICore 与 OMGAILog 互相 require 会成环，故 OMGAICore
@@ -200,4 +209,34 @@ constant integer LOG_LV_FATAL = 4
         // 触发崩溃转储（§11.2）
         call OMGAILog_OMGAILog_DumpCrash()
     endfunction
+
+//---------------------------------------------------------------------------
+// 9. V2.2: 游戏内查日志指令（-omgai_log；不冲突基图 -log/-suiji 指令）
+//---------------------------------------------------------------------------
+
+    private function OMGAI_ChatCmdLog takes nothing returns nothing
+        local player p = GetTriggerPlayer()
+        local string s = StringCase(GetEventPlayerChatString(), false)
+        local string out = ""
+        if s != "-omgai_log" and s != "-omgai_log " then
+            return
+        endif
+        set out = OMGAILog_OMGAILog_GetRecent(8)
+        call DisplayTextToPlayer(p, 0, 0, "OMGAI 最近日志: " + out)
+        call DisplayTextToPlayer(p, 0, 0, "OMGAI 崩溃标志: " + I2S(OMGAICore_OMGAI_LoadGlobalInt(GSLOT_CRASH_FLAG)))
+    endfunction
+
+    public function OMGAILog_ChatCommandInit takes nothing returns nothing
+        local integer i = 0
+        local trigger trg = null
+        loop
+            exitwhen i >= 12
+            set trg = CreateTrigger()
+            call TriggerRegisterPlayerChatEvent(trg, Player(i), "-omgai_log", true)
+            call TriggerAddAction(trg, function OMGAI_ChatCmdLog)
+            set trg = null
+            set i = i + 1
+        endloop
+    endfunction
+
 endlibrary

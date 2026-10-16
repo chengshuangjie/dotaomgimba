@@ -384,15 +384,18 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
         local real hp = 0.0
         if target == null then
             call OMGAICore_OMGAI_SaveInt(hid, 87, 0)
+            call OMGAICore_OMGAI_SaveUnitHandle(hid, 94, null)
             return 0
         endif
         set burst = OMGAI_EstimateBurst(u)
         set hp = GetUnitState(target, UNIT_STATE_LIFE)
         if burst >= hp * BURST_MULT then
             call OMGAICore_OMGAI_SaveInt(hid, 87, GetHandleId(target))
+            call OMGAICore_OMGAI_SaveUnitHandle(hid, 94, target)
             return GetHandleId(target)
         endif
         call OMGAICore_OMGAI_SaveInt(hid, 87, 0)
+        call OMGAICore_OMGAI_SaveUnitHandle(hid, 94, null)
         return 0
     endfunction
 
@@ -500,8 +503,22 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
 
     // 每 tick：刷新秒杀目标 + 蹲守状态（行为层 Desire/Think 前调用）
     public function OMGAI_StrategyTick takes unit u returns nothing
+        local integer hid = GetHandleId(u)
+        local real now = OMGAICore_OMGAI_GetGameTime()
+        local real last = OMGAICore_OMGAI_LoadReal(hid, 99)
+        // V2.6: 2s 节流（FindKillTarget/AmbushThink 内部有枚举，避免每 tick 重算）
+        if now - last < 2.0 then
+            return
+        endif
+        call OMGAICore_OMGAI_SaveReal(hid, 99, now)
         call OMGAI_FindKillTarget(u)
         call OMGAI_AmbushThink(u)
+        // 团战标记（槽 93 = 1 团战中）：供 Behaviors DesireTeam 读取，避免高频枚举
+        if OMGAITargetSel_OMGAI_IsTeamFight(u) then
+            call OMGAICore_OMGAI_SaveInt(hid, 93, 1)
+        else
+            call OMGAICore_OMGAI_SaveInt(hid, 93, 0)
+        endif
     endfunction
 
     public function OMGAIStrategy_Init takes nothing returns nothing

@@ -35,9 +35,39 @@ library OMGAITargetSel requires OMGAICore, OMGAILog, OMGAIActionMask
     endfunction
 
     // 最近敌人（简单实现：遍历单位组取最近；生产用 EnemyState 缓存）
-    public function OMGAI_GetClosestEnemy takes unit u returns unit
-        // TODO: 用 OMGAIEnemyState 的威胁排序缓存 + 位置
-        return null
+        public function OMGAI_GetClosestEnemy takes unit u returns unit
+        local group g = null
+        local unit it = null
+        local unit best = null
+        local real dx = 0.0
+        local real dy = 0.0
+        local real d = 0.0
+        local real bestD = 999999.0
+        local real x = 0.0
+        local real y = 0.0
+        if u == null then
+            return null
+        endif
+        set x = GetUnitX(u)
+        set y = GetUnitY(u)
+        set g = CreateGroup()
+        call GroupEnumUnitsInRange(g, x, y, 1600.0, null)
+        loop
+            set it = FirstOfGroup(g)
+            exitwhen it == null
+            if IsUnitType(it, UNIT_TYPE_HERO) and IsUnitEnemy(it, GetOwningPlayer(u)) and not IsUnitIllusion(it) and GetWidgetLife(it) > 0.405 and not IsUnitType(it, UNIT_TYPE_DEAD) then
+                set dx = GetUnitX(it) - x
+                set dy = GetUnitY(it) - y
+                set d = SquareRoot(dx * dx + dy * dy)
+                if d < bestD then
+                    set bestD = d
+                    set best = it
+                endif
+            endif
+            call GroupRemoveUnit(g, it)
+        endloop
+        call DestroyGroup(g)
+        return best
     endfunction
 
 //---------------------------------------------------------------------------
@@ -45,17 +75,64 @@ library OMGAITargetSel requires OMGAICore, OMGAILog, OMGAIActionMask
 //    目标 1200 码内敌方英雄数 ≤ 1 → 落单
 //---------------------------------------------------------------------------
 
-    public function OMGAI_IsLoneEnemy takes unit target returns boolean
-        // TODO: 遍历 EnemyState 缓存的敌方英雄，计数距离 < GANK_LONE_RADIUS
-        return true
+        public function OMGAI_IsLoneEnemy takes unit target returns boolean
+        local group g = null
+        local unit it = null
+        local integer n = 0
+        if target == null then
+            return false
+        endif
+        set g = CreateGroup()
+        call GroupEnumUnitsInRange(g, GetUnitX(target), GetUnitY(target), GANK_LONE_RADIUS, null)
+        loop
+            set it = FirstOfGroup(g)
+            exitwhen it == null
+            if IsUnitType(it, UNIT_TYPE_HERO) and IsUnitEnemy(it, GetOwningPlayer(target)) and not IsUnitIllusion(it) and GetWidgetLife(it) > 0.405 and not IsUnitType(it, UNIT_TYPE_DEAD) then
+                set n = n + 1
+                if n > 1 then
+                    call DestroyGroup(g)
+                    return false
+                endif
+            endif
+            call GroupRemoveUnit(g, it)
+        endloop
+        call DestroyGroup(g)
+        return n <= 1
     endfunction
 
 //---------------------------------------------------------------------------
 // 4. 团战触发检测（D2 Dota2_Bots：附近友+敌 ≥ 5）
 //---------------------------------------------------------------------------
 
-    public function OMGAI_IsTeamFight takes unit u returns boolean
-        // TODO: 计数 u 周围 TEAM_FIGHT_RANGE 内友军+敌军 ≥ 5
+        public function OMGAI_IsTeamFight takes unit u returns boolean
+        local group g = null
+        local unit it = null
+        local integer allyN = 0
+        local integer enemyN = 0
+        if u == null then
+            return false
+        endif
+        set g = CreateGroup()
+        call GroupEnumUnitsInRange(g, GetUnitX(u), GetUnitY(u), TEAM_FIGHT_RANGE, null)
+        loop
+            set it = FirstOfGroup(g)
+            exitwhen it == null
+            if IsUnitType(it, UNIT_TYPE_HERO) and not IsUnitIllusion(it) and GetWidgetLife(it) > 0.405 and not IsUnitType(it, UNIT_TYPE_DEAD) then
+                if IsUnitAlly(it, GetOwningPlayer(u)) then
+                    set allyN = allyN + 1
+                elseif IsUnitEnemy(it, GetOwningPlayer(u)) then
+                    set enemyN = enemyN + 1
+                endif
+            endif
+            call GroupRemoveUnit(g, it)
+        endloop
+        call DestroyGroup(g)
+        if allyN >= 2 and enemyN >= 2 then
+            return true
+        endif
+        if allyN + enemyN >= 5 then
+            return true
+        endif
         return false
     endfunction
 
@@ -101,9 +178,16 @@ library OMGAITargetSel requires OMGAICore, OMGAILog, OMGAIActionMask
 // 7. 集火目标（EnemyState 威胁排序 top1 + 可击杀分修正）
 //---------------------------------------------------------------------------
 
-    public function OMGAI_GetFocusTarget takes unit u returns unit
-        // TODO: 从 EnemyState 取威胁 top1；若不可击杀/不可达则取 next
-        return null
+        public function OMGAI_GetFocusTarget takes unit u returns unit
+        local unit t = null
+        if u == null then
+            return null
+        endif
+        set t = OMGAICore_OMGAI_LoadUnitHandle(GetHandleId(u), 94)
+        if t != null and GetWidgetLife(t) > 0.405 and not IsUnitType(t, UNIT_TYPE_DEAD) and IsUnitEnemy(t, GetOwningPlayer(u)) then
+            return t
+        endif
+        return OMGAI_GetClosestEnemy(u)
     endfunction
 
 //---------------------------------------------------------------------------

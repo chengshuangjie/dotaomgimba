@@ -7,7 +7,7 @@
 //   Dispatcher 通过 require OMGAIBehaviors 直接调用（不再定义桩函数，防重复定义）。
 //===========================================================================
 
-library OMGAIDispatcher requires OMGAICore, OMGAILog, OMGAIGuard, OMGAIBehaviors
+library OMGAIDispatcher requires OMGAICore, OMGAILog, OMGAIGuard, OMGAIBehaviors, OMGAIStrategy
 
 //---------------------------------------------------------------------------
 // 1. 行为派发表（behaviorId → desire/think，函数来自 OMGAIBehaviors.j）
@@ -186,6 +186,8 @@ library OMGAIDispatcher requires OMGAICore, OMGAILog, OMGAIGuard, OMGAIBehaviors
         if st != 0 then
             call OMGAI_RunHardState(u, st)
         else
+            // V2: 战术层周期（秒杀目标/蹲守/团战标记，2s 节流在 StrategyTick 内部）
+            call OMGAIStrategy_OMGAI_StrategyTick(u)
             call OMGAI_AntiIdle(u)
             call OMGAI_SelectBehavior(u)
             call OMGAI_DispatchThink(OMGAICore_OMGAI_LoadInt(hid, 0), u)

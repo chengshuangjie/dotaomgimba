@@ -219,6 +219,21 @@ library OMGAICore
         call SaveBoolean(OMGAI_H, heroId, slot, value)
     endfunction
 
+    // ---- V2: unit handle 存取（战术层秒杀目标/蹲守目标恢复用）----
+    public function OMGAI_SaveUnitHandle takes integer heroId, integer slot, unit u returns nothing
+        if heroId == 0 or OMGAI_H == null then
+            return
+        endif
+        call SaveUnitHandle(OMGAI_H, heroId, slot, u)
+    endfunction
+
+    public function OMGAI_LoadUnitHandle takes integer heroId, integer slot returns unit
+        if heroId == 0 or OMGAI_H == null then
+            return null
+        endif
+        return LoadUnitHandle(OMGAI_H, heroId, slot)
+    endfunction
+
     // 全局槽读写（二级主键 = GLOBAL_KEY）
     public function OMGAI_LoadGlobalInt takes integer slot returns integer
         if OMGAI_H == null then
@@ -300,6 +315,15 @@ library OMGAICore
 
 
     // 越界告警钩子（由 OMGAILog.j 实现；此处空实现保证可独立编译）
+    // ---- V2.1: 基图 SuijiAI 施法引擎对接（native 声明：编译期不检查，运行时挂接基图函数）----
+    native SuijiAI_TargetOrderId takes integer skill returns integer
+    native SuijiAI_PointOrderId takes integer skill returns integer
+    native SuijiAI_ImmediateOrderId takes integer skill returns integer
+    native SuijiAI_IssueMappedTarget takes unit u, unit target, integer skill returns boolean
+    native SuijiAI_IssueMappedPoint takes unit u, real x, real y, integer skill returns boolean
+    native SuijiAI_IssueMappedImmediate takes unit u, integer skill returns boolean
+    native SuijiAI_CanPayAndCastNormally takes unit u, integer skill returns boolean
+
     public function OMGAI_ArrGuardWarn takes integer idx, string op returns nothing
         // TODO: 接入 OMGAILog 后替换为 LOG_WARN("ARRAY", "越界 idx="+I2S(idx)+" op="+op)
     endfunction

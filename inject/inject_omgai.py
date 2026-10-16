@@ -3,7 +3,7 @@ import io, re
 
 base = r'D:\dota\DOTA69AI\logs\base_v11.j'
 omgai = r'D:\dota\DOTA69AI\logs\omgai_core_compiled.j'
-outp = r'D:\dota\DOTA69AI\logs\merged_v5.j'
+outp = r'D:\dota\DOTA69AI\logs\merged_v6.j'
 
 with io.open(base, 'r', encoding='utf-8', newline='') as f:
     txt = f.read()  # 基图 LF 换行
@@ -65,10 +65,10 @@ print('base main at line', main_line + 1, 'endfunction at line', end_line + 1)
 
 # 3) 组装
 init_calls = [
-    'call ExecuteFunc("jasshelper__initstructs78829546")',
-    'call ExecuteFunc("OMGAIGameMode__OnInit")',
+    'call ExecuteFunc("jasshelper__initstructs95609718")',
+    'call ExecuteFunc("OMGAIGameMode___OnInit")',
     'call ExecuteFunc("OMGAIStateCleaner_Init")',
-    'call ExecuteFunc("OMGAISkillData__Init")',
+    'call ExecuteFunc("OMGAISkillData___Init")',
     'call ExecuteFunc("OMGAIInit__OnInit")',
     'call OMGAISuperAIInit_OMGAI_InitAll()',
 ]

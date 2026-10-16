@@ -87,33 +87,42 @@ library OMGAIBehaviors requires OMGAICore, OMGAILog, OMGAISpellCast, OMGAITarget
 //    Think：ASSEMBLE→ROAMING→目标丢失5s重算
 //---------------------------------------------------------------------------
 
-    public function OMGAI_DesireGank takes unit u returns real
-        local unit target = null
+        public function OMGAI_DesireGank takes unit u returns real
+        local unit target = OMGAICore_OMGAI_LoadUnitHandle(GetHandleId(u), 94)
         local real d = 0.0
-        // 四条件逐项判定（TODO: 用 EnemyState 数据）
-        set target = OMGAITargetSel_OMGAI_GetClosestEnemy(u)
         if target == null then
             return 0.0
         endif
-        // 目标血 < 50% 或战力差 → 候选
-        if GetUnitState(target, UNIT_STATE_LIFE) < GetUnitState(target, UNIT_STATE_MAX_LIFE) * GANK_TARGET_HP then
-            set d = 0.5
-        endif
-        // 落单判定
+        // 有秒杀目标（FindKillTarget 已判残血+爆发够）→ 基础 0.7
+        set d = 0.7
+        // 落单 + 0.2
         if OMGAITargetSel_OMGAI_IsLoneEnemy(target) then
-            set d = d + 0.3
+            set d = d + 0.2
         endif
         // 随机命中（70%）
         if GetRandomInt(1, 100) > 70 then
             set d = 0.0
         endif
-        set target = null
         return d
     endfunction
 
-    public function OMGAI_ThinkGank takes unit u returns nothing
-        // TODO: ASSEMBLE（召集队友）→ ROAMING（追踪）→ 目标丢失 >5s 解散
-        call OMGAILog_LOG_DEBUG("BEH", "Gank Think")
+        public function OMGAI_ThinkGank takes unit u returns nothing
+        local unit target = OMGAITargetSel_OMGAI_GetFocusTarget(u)
+        local integer hid = GetHandleId(u)
+        local real now = OMGAICore_OMGAI_GetGameTime()
+        local real last = OMGAICore_OMGAI_LoadReal(hid, 95)
+        if target == null then
+            return
+        endif
+        if now - last < 0.6 then
+            return
+        endif
+        call OMGAICore_OMGAI_SaveReal(hid, 95, now)
+        // 已在攻击目标则不发新命令（避免打断基图 AI）
+        if GetUnitCurrentOrder(u) != OrderId("smart") then
+            call IssueTargetOrder(u, "smart", target)
+            call OMGAILog_LOG_WARN("GANK", "集火 " + I2S(GetUnitTypeId(target)) + " hp%=" + R2S(GetUnitState(target, UNIT_STATE_LIFE) / GetUnitState(target, UNIT_STATE_MAX_LIFE)))
+        endif
     endfunction
 
 //---------------------------------------------------------------------------
@@ -153,18 +162,52 @@ library OMGAIBehaviors requires OMGAICore, OMGAILog, OMGAISpellCast, OMGAITarget
 // 5. 团战（§6.5）
 //---------------------------------------------------------------------------
 
-    public function OMGAI_DesireTeam takes unit u returns real
-        // 附近友+敌 ≥ 5 → 进入团战
-        if OMGAITargetSel_OMGAI_IsTeamFight(u) then
+        public function OMGAI_DesireTeam takes unit u returns real
+        if OMGAICore_OMGAI_LoadInt(GetHandleId(u), 93) == 1 then
             return 1.0
         endif
         return 0.0
     endfunction
 
-    public function OMGAI_ThinkTeam takes unit u returns nothing
-        // TODO: 集火目标（威胁 top1 + 可击杀修正）→ Combo 编排（D1 ai_TimedCombo）
-        // TODO: 撤退判断（力量比 FLEE_RATIO=4.0）
-        call OMGAILog_LOG_DEBUG("BEH", "Team Think")
+        public function OMGAI_ThinkTeam takes unit u returns nothing
+        local unit target = OMGAITargetSel_OMGAI_GetFocusTarget(u)
+        local integer hid = GetHandleId(u)
+        local integer role = OMGAICore_OMGAI_LoadInt(hid, 86)
+        local real now = OMGAICore_OMGAI_GetGameTime()
+        local real last = OMGAICore_OMGAI_LoadReal(hid, 96)
+        local real want = 600.0
+        local real dx = 0.0
+        local real dy = 0.0
+        local real dist = 0.0
+        if now - last < 1.0 then
+            return
+        endif
+        call OMGAICore_OMGAI_SaveReal(hid, 96, now)
+        // 按角色站位：坦克(2)贴前 / 近战(1)中 / 法师辅助(3/4)拉后 / 其他中
+        if role == 2 then
+            set want = 350.0
+        elseif role == 1 then
+            set want = 450.0
+        elseif role == 3 or role == 4 then
+            set want = 800.0
+        endif
+        if target != null then
+            set dx = GetUnitX(u) - GetUnitX(target)
+            set dy = GetUnitY(u) - GetUnitY(target)
+            set dist = SquareRoot(dx * dx + dy * dy)
+            if dist > want + 200.0 and dist > 1.0 then
+                // 太远：向目标靠近到 want 距离
+                call IssuePointOrder(u, "move", GetUnitX(target) + dx / dist * want, GetUnitY(target) + dy / dist * want)
+            elseif dist < want - 200.0 and dist > 1.0 then
+                // 太近：后撤拉开
+                call IssuePointOrder(u, "move", GetUnitX(u) + dx / dist * 250.0, GetUnitY(u) + dy / dist * 250.0)
+            endif
+            // 集火
+            if GetUnitCurrentOrder(u) != OrderId("smart") then
+                call IssueTargetOrder(u, "smart", target)
+            endif
+        endif
+        call OMGAILog_LOG_WARN("TEAM", "团战站位 role=" + I2S(role) + " want=" + R2S(want))
     endfunction
 
 //---------------------------------------------------------------------------
@@ -181,24 +224,56 @@ library OMGAIBehaviors requires OMGAICore, OMGAILog, OMGAISpellCast, OMGAITarget
         return 0.0
     endfunction
 
-    public function OMGAI_ThinkRetreat takes unit u returns nothing
-        // TODO: 向泉水/塔位移 + 逃生技能（eventMask=8）+ 受击 3s 禁跳刀（坑#24）
-        // 防抖：撤退判定 5s 内不反复
-        call OMGAILog_LOG_DEBUG("BEH", "Retreat Think")
+        public function OMGAI_ThinkRetreat takes unit u returns nothing
+        local integer hid = GetHandleId(u)
+        local real now = OMGAICore_OMGAI_GetGameTime()
+        local real last = OMGAICore_OMGAI_LoadReal(hid, 97)
+        local player p = GetOwningPlayer(u)
+        local real fx = 0.0
+        local real fy = 0.0
+        if now - last < 2.0 then
+            return
+        endif
+        call OMGAICore_OMGAI_SaveReal(hid, 97, now)
+        set fx = GetStartLocationX(GetPlayerStartLocation(p))
+        set fy = GetStartLocationY(GetPlayerStartLocation(p))
+        // 死亡或已回家则不重复发命令
+        if not UnitAlive(u) then
+            return
+        endif
+        if GetUnitCurrentOrder(u) != OrderId("move") or OMGAICore_OMGAI_LoadInt(hid, 97) == 0 then
+            call IssuePointOrder(u, "move", fx, fy)
+            call OMGAILog_LOG_WARN("RETR", "低血撤退 hp%=" + R2S(GetUnitState(u, UNIT_STATE_LIFE) / GetUnitState(u, UNIT_STATE_MAX_LIFE)))
+        endif
     endfunction
 
 //---------------------------------------------------------------------------
 // 7. 视野/插眼（§6.7）
 //---------------------------------------------------------------------------
 
-    public function OMGAI_DesireWard takes unit u returns real
-        // TODO: 眼位时间窗表（2min 河道/12min 野区/塔掉换点）+ 插眼安全
-        return 0.0
+        public function OMGAI_DesireWard takes unit u returns real
+        local real now = OMGAICore_OMGAI_GetGameTime()
+        local real last = OMGAICore_OMGAI_LoadReal(GetHandleId(u), 98)
+        if now - last < 60.0 then
+            return 0.0
+        endif
+        return 0.1
     endfunction
 
-    public function OMGAI_ThinkWard takes unit u returns nothing
-        // TODO: 插眼前"敌人比我近就不插"检查（D2 adam3q:390）
-        call OMGAILog_LOG_DEBUG("BEH", "Ward Think")
+        public function OMGAI_ThinkWard takes unit u returns nothing
+        local integer hid = GetHandleId(u)
+        local real now = OMGAICore_OMGAI_GetGameTime()
+        local real last = OMGAICore_OMGAI_LoadReal(hid, 98)
+        if now - last < 60.0 then
+            return
+        endif
+        call OMGAICore_OMGAI_SaveReal(hid, 98, now)
+        // 反眼：Strategy 标记的可疑眼位（槽 92）→ 日志提示
+        if OMGAICore_OMGAI_LoadInt(hid, 92) != 0 then
+            call OMGAILog_LOG_WARN("WARD", "反眼：可疑眼位已标记，待真眼反制")
+        endif
+        // 视野检查（基图守卫物品对接后续版本，先记日志）
+        call OMGAILog_LOG_WARN("WARD", "视野窗口：插眼/反眼巡检")
     endfunction
 
 //---------------------------------------------------------------------------

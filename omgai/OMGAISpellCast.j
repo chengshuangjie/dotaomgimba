@@ -40,38 +40,19 @@ library OMGAISpellCast requires OMGAICore, OMGAILog, OMGAIActionMask, OMGAITarge
 //    orderId 由 SkillPool 配表提供
 //---------------------------------------------------------------------------
 
-    public function OMGAI_IssueOrder takes unit u, integer abilityId, integer tt, unit target, real x, real y returns boolean
-        local integer orderId = 0
+        public function OMGAI_IssueOrder takes unit u, integer abilityId, integer tt, unit target, real x, real y returns boolean
         if u == null then
             return false
         endif
-        // TODO: orderId = OMGAI_GetOrderId(abilityId)（SkillPool 槽 2）
-        set orderId = 852274 // 占位
-        if tt == TT_POINT then
-            return IssuePointOrderById(u, orderId, x, y)
-        elseif tt == TT_AREA then
-            // AoE 落点（由 TargetSel 计算命中最多点）
-            return IssuePointOrderById(u, orderId, x, y)
-        elseif tt == TT_UNIT then
+        // V2: 直接对接基图 SuijiAI 施法引擎（技能 -> 订单映射 + 执行）
+        if tt == TT_UNIT or tt == TT_ALLY or tt == TT_SELF or tt == TT_CORPSE then
             if target != null then
-                return IssueTargetOrderById(u, orderId, target)
+                return SuijiAI_IssueMappedTarget(u, target, abilityId)
             endif
-        elseif tt == TT_NO_TARGET then
-            return IssueImmediateOrderById(u, orderId)
-        elseif tt == TT_ALLY then
-            if target != null then
-                return IssueTargetOrderById(u, orderId, target)
-            endif
-        elseif tt == TT_SELF then
-            return IssueTargetOrderById(u, orderId, u)
-        elseif tt == TT_CORPSE then
-            if target != null then
-                return IssueTargetOrderById(u, orderId, target)
-            endif
-        elseif tt == TT_TOGGLE then
-            // 开关类：先判断当前状态（法球/脉冲），再决定开/关
-            // TODO: 状态判断
-            return IssueImmediateOrderById(u, orderId)
+        elseif tt == TT_POINT or tt == TT_AREA then
+            return SuijiAI_IssueMappedPoint(u, x, y, abilityId)
+        else
+            return SuijiAI_IssueMappedImmediate(u, abilityId)
         endif
         return false
     endfunction
@@ -87,19 +68,21 @@ library OMGAISpellCast requires OMGAICore, OMGAILog, OMGAIActionMask, OMGAITarge
     constant integer SLOT_SOFT_CD = 5
 
     endglobals
-    public function OMGAI_SpellGuard takes unit u, integer abilityId, unit target returns boolean
+        public function OMGAI_SpellGuard takes unit u, integer abilityId, unit target returns boolean
         local integer hid = GetHandleId(u)
         local real now = OMGAICore_OMGAI_GetGameTime()
-        // ③ 单位级软冷却
+        // 1. 单位软冷却（OMGAI 自身）
         if OMGAICore_OMGAI_LoadReal(hid, SLOT_SOFT_CD) > now then
             return false
         endif
-        // ① 动作掩码
+        // 2. 动作掩码校验
         if not OMGAIActionMask_OMGAI_ActionMaskValid(u, abilityId, target) then
             return false
         endif
-        // ② 命令白名单（吟唱中屏蔽，坑#6）
-        // TODO: 判定 GetUnitCurrentOrder 是否在施法引导中
+        // 3. 基图蓝耗/资源校验（SuijiAI_CanPayAndCastNormally）
+        if not SuijiAI_CanPayAndCastNormally(u, abilityId) then
+            return false
+        endif
         return true
     endfunction
 

@@ -21,6 +21,8 @@ library OMGAISuperAIInit requires OMGAICore, OMGAILog, OMGAIGuard, OMGAIActionMa
         // 2) 日志（其余库打日志依赖它）
         call OMGAILog_OMGAILog_Init()
         call OMGAILog_OMGAILog_InitCache()
+        // V2.3: 游戏内查日志指令（-omgai_log）
+        call OMGAILog_OMGAILog_ChatCommandInit()
         // 3) 崩溃防护（P9 自检：失败则降档，但继续初始化，保证单局不崩全场）
         call OMGAIGuard_OMGAI_GuardInit()
         // 4) 数据/执行层

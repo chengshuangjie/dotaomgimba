@@ -109,6 +109,7 @@ library OMGAISpellCast requires OMGAICore, OMGAILog, OMGAIActionMask, OMGAITarge
             call OMGAIActionMask_OMGAI_MarkCooldown(u, abilityId, OMGAIActionMask_OMGAI_GetSoftCD(abilityId))
             call OMGAICore_OMGAI_SaveReal(GetHandleId(u), SLOT_SOFT_CD, OMGAICore_OMGAI_GetGameTime() + 0.15)
             call OMGAISpellCast_OMGAI_CastSuccess(u)
+            call OMGAILearn_OMGAI_LearnOnCast(u, abilityId, target)
             // 补发原命令（0.5s 后若 idle 则补攻击/移动）
             // TODO: TimerService 延迟回调 OMGAI_ReissueCommand(u)
             return true

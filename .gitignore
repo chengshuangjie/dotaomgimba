@@ -19,3 +19,6 @@ add_excl*.ps1
 # Python
 __pycache__/
 *.pyc
+
+OMGAI_test_fwd*.j
+_test_fwd*.j

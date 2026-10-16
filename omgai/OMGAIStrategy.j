@@ -1,13 +1,21 @@
 // ===========================================================================
-// OMGAIStrategy.j  --  Dota OMG 超级 AI 战术意识层（V2.3 完善版）
+// OMGAIStrategy.j  --  Dota OMG 超级 AI 战术意识层（V2.4 基图运行时对接版）
 //   对应 PRD 6A.1 流派识别 / 6A.2 团战定位 / 6A.3 秒人判断 / 6A.4 蹲守针对 / 6A.5 视野
 //   依赖 OMGAICore、OMGAILog、OMGAIEnemyState、OMGAITargetSel、
-//        OMGAISkillDef、OMGAIPlayerSkillState、OMGAISkillTag
+//        OMGAISkillDef、OMGAIPlayerSkillState、OMGAISkillTag、OMGAIBaseSkillTable
 //   设计原则：战术层不直接施法——通过"desire 加减权 + 行为通道 + 站位写入 + 目标覆盖"驱动行为
-//   升级：V2.3 对接 SkillDef 标签 + PlayerSkillState 技能槽，补全流派识别/爆发估算/站位
+//   V2.4 升级：native 对接基图 SuijiMode 运行时（物理/魔法技能分类），
+//              英雄实际技能枚举（GetUnitAbility + 基图 OMG 技能池全集 528）写入 PSS，
+//              流派识别/爆发估算基于真实技能而非空槽
 // ===========================================================================
 
-library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITargetSel, OMGAISkillDef, OMGAIPlayerSkillState, OMGAISkillTag
+library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITargetSel, OMGAISkillDef, OMGAIPlayerSkillState, OMGAISkillTag, OMGAIBaseSkillTable
+
+// ---- 基图运行时函数对接（native 声明：编译期不检查，运行时真实调用基图函数）----
+// 签名来源：基图 war3map.j（SuijiMode 随机OMG模块）
+    native SuijiMode_GetStableHeroIndex takes unit u returns integer
+    native SuijiMode_SkillClass takes integer skill returns integer
+    native SuijiMode_IsPhysicalSkill takes integer skill returns boolean
 
 //---------------------------------------------------------------------------
 // 1. 流派与定位（对应 6A.1 / 6A.2）
@@ -50,8 +58,7 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
     endglobals
 
 //---------------------------------------------------------------------------
-// 2. 流派识别（对应 6A.1）——对接 SkillDef 标签
-//    技能标签位映射：STAG_* -> ARCH_*
+// 2. 流派识别（对应 6A.1）——双通道：基图物理/魔法分类 + SkillDef 控制/生存/功能标签
 //---------------------------------------------------------------------------
 
     // 判断 value 的 bit 位是否置位（bit = 1/2/4/8/16...）
@@ -59,7 +66,7 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
         return ModuloInteger(value, bit * 2) >= bit
     endfunction
 
-    // 单个技能 -> 流派位掩码（可多标签叠加）
+    // 单个技能 -> 流派位掩码（可多标签叠加；基于 OMGAI SkillDef 标签）
     public function OMGAI_GetSkillArchetype takes integer abilityId returns integer
         local integer idx = OMGAISkillDef_FindByRawCode(abilityId)
         local integer tags = 0
@@ -90,28 +97,61 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
         return arch
     endfunction
 
-    // 4+2 综合：枚举英雄 6 技能槽（4 固定 + 2 额外），累加标签 -> 判流派
+    // 枚举英雄实际技能（基图已授予的 OMG 技能池技能）-> 写入 PSS 4+2 槽
+    // 基图技能池 = HM4/HN4/HO4（小技能）+ HP4/HQ4（大招），英雄基础技能也在池内
+    // 返回收集到的技能数
+    public function OMGAI_EnumerateHeroSkills takes unit u returns integer
+        local integer pid = GetPlayerId(GetOwningPlayer(u)) + 1
+        local integer i = 1
+        local integer count = 0
+        local integer slot = 1
+        local integer raw = 0
+        loop
+            exitwhen i > BASE_SKILL_COUNT or slot > 6
+            set raw = BASE_SKILL_TABLE[i]
+            if GetUnitAbilityLevel(u, raw) > 0 then
+                if slot <= 4 then
+                    call OMGAIPlayerSkillState_SetFixedSkillRawCode(pid, slot, raw)
+                elseif slot == 5 then
+                    set PSS_ExtraSmall[pid] = raw
+                else
+                    set PSS_ExtraBig[pid] = raw
+                endif
+                set slot = slot + 1
+                set count = count + 1
+            endif
+            set i = i + 1
+        endloop
+        if count > 0 then
+            call OMGAILog_LOG_INFO("STRAT", "技能枚举 pid=" + I2S(pid) + " count=" + I2S(count))
+        endif
+        return count
+    endfunction
+
+    // 4+2 综合：从 PSS 技能槽读实际技能，双通道分类 -> 判流派
     public function OMGAI_ComputeBuild takes unit u returns integer
         local integer pid = GetPlayerId(GetOwningPlayer(u)) + 1
         local integer i = 0
         local integer abilityId = 0
         local integer arch = 0
+        local integer cls = 0
         local integer phys = 0
         local integer magic = 0
         local integer ctrl = 0
         local integer surv = 0
         local integer util = 0
+        // 4 固定槽
         loop
             exitwhen i >= 4
             set abilityId = OMGAIPlayerSkillState_GetFixedSkillRawCode(pid, i + 1)
             if abilityId != 0 then
-                set arch = OMGAI_GetSkillArchetype(abilityId)
-                if BitIsSet(arch, ARCH_PHYSICAL) then
+                set cls = SuijiMode_SkillClass(abilityId)
+                if cls == 1 then
                     set phys = phys + 1
-                endif
-                if BitIsSet(arch, ARCH_MAGIC) then
+                elseif cls == 2 then
                     set magic = magic + 1
                 endif
+                set arch = OMGAI_GetSkillArchetype(abilityId)
                 if BitIsSet(arch, ARCH_CONTROL) then
                     set ctrl = ctrl + 1
                 endif
@@ -127,13 +167,13 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
         // 额外小技能
         set abilityId = PSS_ExtraSmall[pid]
         if abilityId != 0 then
-            set arch = OMGAI_GetSkillArchetype(abilityId)
-            if BitIsSet(arch, ARCH_PHYSICAL) then
+            set cls = SuijiMode_SkillClass(abilityId)
+            if cls == 1 then
                 set phys = phys + 1
-            endif
-            if BitIsSet(arch, ARCH_MAGIC) then
+            elseif cls == 2 then
                 set magic = magic + 1
             endif
+            set arch = OMGAI_GetSkillArchetype(abilityId)
             if BitIsSet(arch, ARCH_CONTROL) then
                 set ctrl = ctrl + 1
             endif
@@ -147,13 +187,13 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
         // 额外大技能
         set abilityId = PSS_ExtraBig[pid]
         if abilityId != 0 then
-            set arch = OMGAI_GetSkillArchetype(abilityId)
-            if BitIsSet(arch, ARCH_PHYSICAL) then
+            set cls = SuijiMode_SkillClass(abilityId)
+            if cls == 1 then
                 set phys = phys + 1
-            endif
-            if BitIsSet(arch, ARCH_MAGIC) then
+            elseif cls == 2 then
                 set magic = magic + 1
             endif
+            set arch = OMGAI_GetSkillArchetype(abilityId)
             if BitIsSet(arch, ARCH_CONTROL) then
                 set ctrl = ctrl + 1
             endif
@@ -164,27 +204,25 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
                 set util = util + 1
             endif
         endif
-        // 综合评分（对应 6A.1 判定 / 物理流 / 法师流 / 肉盾流 / 控制辅助流）
+        // 综合评分（缓存）
         call OMGAICore_OMGAI_SaveInt(GetHandleId(u), 81, phys)
         call OMGAICore_OMGAI_SaveInt(GetHandleId(u), 82, magic)
         call OMGAICore_OMGAI_SaveInt(GetHandleId(u), 83, ctrl)
         call OMGAICore_OMGAI_SaveInt(GetHandleId(u), 84, surv)
         call OMGAICore_OMGAI_SaveInt(GetHandleId(u), 85, util)
-        if phys >= 2 and ctrl <= 0 and magic <= 0 then
-            call OMGAICore_OMGAI_SaveInt(GetHandleId(u), 80, BUILD_PHYS)
-            return BUILD_PHYS
-        elseif magic >= 2 and ctrl >= 1 then
-            call OMGAICore_OMGAI_SaveInt(GetHandleId(u), 80, BUILD_MAGIC)
-            return BUILD_MAGIC
-        elseif surv >= 2 then
+        // 流派判定（肉/控制优先，其次物理/魔法）
+        if surv >= 2 then
             call OMGAICore_OMGAI_SaveInt(GetHandleId(u), 80, BUILD_TANK)
             return BUILD_TANK
         elseif ctrl >= 2 then
             call OMGAICore_OMGAI_SaveInt(GetHandleId(u), 80, BUILD_CTRL)
             return BUILD_CTRL
-        elseif phys >= 1 and magic >= 1 then
-            call OMGAICore_OMGAI_SaveInt(GetHandleId(u), 80, BUILD_MIXED)
-            return BUILD_MIXED
+        elseif phys >= 2 and magic <= 1 then
+            call OMGAICore_OMGAI_SaveInt(GetHandleId(u), 80, BUILD_PHYS)
+            return BUILD_PHYS
+        elseif magic >= 2 and phys <= 1 then
+            call OMGAICore_OMGAI_SaveInt(GetHandleId(u), 80, BUILD_MAGIC)
+            return BUILD_MAGIC
         endif
         call OMGAICore_OMGAI_SaveInt(GetHandleId(u), 80, BUILD_MIXED)
         return BUILD_MIXED
@@ -214,8 +252,6 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
 
 //---------------------------------------------------------------------------
 // 3. 团战定位（对应 6A.2）
-//    定位分配：按 流派+职业 -> VANGUARD/DPS/NUKER/SUPPORT
-//    数据：缓存 = 英雄 hid，槽 86 = 定位
 //---------------------------------------------------------------------------
 
     public function OMGAI_AssignRole takes unit u returns integer
@@ -240,7 +276,7 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
         return OMGAICore_OMGAI_LoadInt(GetHandleId(u), 86)
     endfunction
 
-    // 站位距离计算：按定位返回理想团战距离（行为层取用）
+    // 站位距离计算：按定位返回理想团战距离
     public function OMGAI_ComputeStandPos takes unit u, unit enemyCore returns real
         local integer role = OMGAI_GetRole(u)
         if role == ROLE_VANGUARD then
@@ -266,12 +302,14 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
     endfunction
 
 //---------------------------------------------------------------------------
-// 4. 秒人判断（对应 6A.3）——用 SkillDef 数据估算爆发
+// 4. 秒人判断（对应 6A.3）——爆发估算
 //    规则：爆发预估 >= 血量*1.1 且 有控制链配合 -> gank/团战 desire +0.5 + focusTarget 写入
 //    数据：缓存 = 英雄 hid，槽 87 = 当前秒杀目标（handle id）
 //---------------------------------------------------------------------------
 
-    // 估算当前 4+2 技能 CD 就绪的爆发伤害（SkillDef.DmgScale 近似：scale*60 基础伤害 *1.3 技能等级加成）
+    // 估算当前 4+2 技能爆发：
+    //   SkillDef 已注册技能：DmgScale*60*1.3（技能等级加成）
+    //   未注册技能：物理按 (力量+敏捷*1.5)，魔法按 智力*3（近似，后续用 w3a 精修）
     public function OMGAI_EstimateBurst takes unit u returns real
         local integer pid = GetPlayerId(GetOwningPlayer(u)) + 1
         local integer i = 0
@@ -279,6 +317,7 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
         local integer idx = 0
         local real total = 0.0
         local real scale = 0.0
+        local integer cls = 0
         loop
             exitwhen i >= 4
             set abilityId = OMGAIPlayerSkillState_GetFixedSkillRawCode(pid, i + 1)
@@ -288,6 +327,13 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
                     set scale = SkillDef_DmgScale[idx]
                     if scale > 0.0 then
                         set total = total + scale * 60.0 * 1.3
+                    endif
+                else
+                    set cls = SuijiMode_SkillClass(abilityId)
+                    if cls == 1 then
+                        set total = total + (GetHeroStr(u, true) + GetHeroAgi(u, true) * 1.5) * 1.2
+                    elseif cls == 2 then
+                        set total = total + GetHeroInt(u, true) * 3.0
                     endif
                 endif
             endif
@@ -301,6 +347,13 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
                 if scale > 0.0 then
                     set total = total + scale * 60.0 * 1.3
                 endif
+            else
+                set cls = SuijiMode_SkillClass(abilityId)
+                if cls == 1 then
+                    set total = total + (GetHeroStr(u, true) + GetHeroAgi(u, true) * 1.5) * 1.2
+                elseif cls == 2 then
+                    set total = total + GetHeroInt(u, true) * 3.0
+                endif
             endif
         endif
         set abilityId = PSS_ExtraBig[pid]
@@ -310,6 +363,13 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
                 set scale = SkillDef_DmgScale[idx]
                 if scale > 0.0 then
                     set total = total + scale * 60.0 * 1.3
+                endif
+            else
+                set cls = SuijiMode_SkillClass(abilityId)
+                if cls == 1 then
+                    set total = total + (GetHeroStr(u, true) + GetHeroAgi(u, true) * 1.5) * 1.2
+                elseif cls == 2 then
+                    set total = total + GetHeroInt(u, true) * 3.0
                 endif
             endif
         endif
@@ -346,9 +406,6 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
 
 //---------------------------------------------------------------------------
 // 5. 蹲守针对（对应 6A.4）
-//    关键英雄 = 敌方威胁 top1（EnemyState 提供）
-//    状态机：AMBUSH_IDLE（隐匿）-> AMBUSH_WAIT（蹲守盲区）-> AMBUSH_ENGAGE（现身逼近）-> AMBUSH_PRESS（低血压制）
-//    数据：缓存 = 英雄 hid，槽 88 = 蹲守状态
 //---------------------------------------------------------------------------
 
     public function OMGAI_AmbushThink takes unit u returns integer
@@ -396,15 +453,13 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
         return 0.0
     endfunction
 
-    // 针对出装：按 EnemyState 对位 Build 返回反制装备栏位（V2.3 保留接口，出装系统对接后启用）
+    // 针对出装：按 EnemyState 对位 Build 返回反制装备栏位（出装系统对接后启用）
     public function OMGAI_CounterBuild takes unit u returns integer
         return 0
     endfunction
 
 //---------------------------------------------------------------------------
 // 6. 视野博弈（对应 6A.5）
-//    反眼：敌方在可疑位置停留 -> 标记（基础版记录坐标缓存，供反眼决策）
-//    开雾：gank/秒人时机 + 目标不可见 -> 建议开雾
 //---------------------------------------------------------------------------
 
     // 标记可疑守卫：敌方英雄在我方附近停留过 -> 记录
@@ -413,12 +468,12 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
         call OMGAICore_OMGAI_SaveInt(GetHandleId(wardLoc), 93, GetHandleId(enemyNear))
     endfunction
 
-    // 反眼目标：返回视野内最近的敌方守卫（守卫类型库对接后启用；V2.3 保守返回 null）
+    // 反眼目标：返回视野内最近的敌方守卫（守卫类型库对接后启用；V2.4 保守返回 null）
     public function OMGAI_GetWardToDeWard takes unit u returns unit
         return null
     endfunction
 
-    // 开雾判断：有秒杀目标且目标不可见 -> 建议开雾（对接雾道具后实际执行）
+    // 开雾判断：有秒杀目标且目标不可见 -> 建议开雾
     public function OMGAI_ShouldUseSmoke takes unit u returns boolean
         local integer kill = OMGAICore_OMGAI_LoadInt(GetHandleId(u), 87)
         if kill != 0 then
@@ -431,8 +486,13 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
 // 7. 初始化与自检
 //---------------------------------------------------------------------------
 
-    // 注册：AI 英雄出生后调用 -> 流派识别 + 定位分配
+    // 注册：AI 英雄出生后调用 -> 枚举技能 + 流派识别 + 定位分配
     public function OMGAI_StrategyInitHero takes unit u returns nothing
+        local integer pid = GetPlayerId(GetOwningPlayer(u)) + 1
+        // 初始化 PSS 状态（电脑侧无 UI 流程，直接进入完成态）
+        call OMGAIPlayerSkillState_Init(pid, GetUnitTypeId(u), u)
+        // 枚举英雄实际技能 -> 写 PSS 4+2 槽
+        call OMGAI_EnumerateHeroSkills(u)
         call OMGAI_ComputeBuild(u)
         call OMGAI_AssignRole(u)
         call OMGAILog_LOG_INFO("STRAT", "英雄战术初始化: build=" + I2S(OMGAI_GetBuild(u)) + " role=" + I2S(OMGAI_GetRole(u)))
@@ -445,7 +505,7 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
     endfunction
 
     public function OMGAIStrategy_Init takes nothing returns nothing
-        call OMGAILog_LOG_INFO("STRAT", "OMGAIStrategy 战术意识层初始化完成（V2.3）")
+        call OMGAILog_LOG_INFO("STRAT", "OMGAIStrategy 战术意识层初始化完成（V2.4 基图运行时对接）")
     endfunction
 
 

@@ -282,6 +282,80 @@ library OMGAIBehaviors requires OMGAICore, OMGAILog, OMGAISpellCast, OMGAITarget
     endfunction
 
 //---------------------------------------------------------------------------
+// 9. v0.9 辅助战术动作（开雾逼近 / 战略眼位 / 出装引导）
+//    由 Dispatcher TickUnit 的 OMGAI_BehaviorsAuxTick 调用，不抢占主行为
+//---------------------------------------------------------------------------
+
+    // 开雾逼近：有秒杀目标且目标不可见 -> 主动逼近（竞赛级抓人意识）
+    public function OMGAI_ThinkSmoke takes unit u returns nothing
+        local unit target = OMGAICore_OMGAI_LoadUnitHandle(GetHandleId(u), 94)
+        local integer hid = GetHandleId(u)
+        local real now = OMGAICore_OMGAI_GetGameTime()
+        local real last = OMGAICore_OMGAI_LoadReal(hid, 100)
+        if target == null then
+            return
+        endif
+        if now - last < 4.0 then
+            return
+        endif
+        call OMGAICore_OMGAI_SaveReal(hid, 100, now)
+        if not IsUnitVisible(target, GetOwningPlayer(u)) then
+            call IssuePointOrder(u, "move", GetUnitX(target), GetUnitY(target))
+            call OMGAILog_LOG_WARN("SMOKE", "SMOKE approach target=" + I2S(GetUnitTypeId(target)))
+        endif
+        set target = null
+    endfunction
+
+    // 战略眼位站岗：辅助角色定期去河道关键点站岗（视野补位，插眼物品对接前置）
+    public function OMGAI_ThinkWardPlace takes unit u returns nothing
+        local integer hid = GetHandleId(u)
+        local integer role = OMGAICore_OMGAI_LoadInt(hid, 86)
+        local real now = OMGAICore_OMGAI_GetGameTime()
+        local real last = OMGAICore_OMGAI_LoadReal(hid, 101)
+        local real wx = 0.0
+        local real wy = 0.0
+        local rect world = GetWorldBounds()
+        if role != 3 and role != 4 then
+            return
+        endif
+        if now - last < 90.0 then
+            return
+        endif
+        call OMGAICore_OMGAI_SaveReal(hid, 101, now)
+        set wx = GetRectCenterX(world)
+        set wy = GetRectCenterY(world)
+        call IssuePointOrder(u, "move", wx, wy)
+        call OMGAILog_LOG_WARN("WARD", "WARD post x=" + R2S(wx) + " y=" + R2S(wy))
+        set world = null
+    endfunction
+
+    // 出装引导：按 CounterBuild 流派结果输出针对出装建议（购买系统对接前置）
+    public function OMGAI_BuyGuide takes unit u returns nothing
+        local integer hid = GetHandleId(u)
+        local integer cb = OMGAIStrategy_OMGAI_CounterBuild(u)
+        local real now = OMGAICore_OMGAI_GetGameTime()
+        local real last = OMGAICore_OMGAI_LoadReal(hid, 102)
+        if now - last < 60.0 then
+            return
+        endif
+        call OMGAICore_OMGAI_SaveReal(hid, 102, now)
+        if cb == 1 then
+            call OMGAILog_LOG_WARN("BUY", "BUY counter physical armor")
+        elseif cb == 2 then
+            call OMGAILog_LOG_WARN("BUY", "BUY counter magic resist")
+        else
+            call OMGAILog_LOG_WARN("BUY", "BUY balanced core build")
+        endif
+    endfunction
+
+    // 辅助动作聚合（由 Dispatcher TickUnit 调用）
+    public function OMGAI_BehaviorsAuxTick takes unit u returns nothing
+        call OMGAI_ThinkSmoke(u)
+        call OMGAI_ThinkWardPlace(u)
+        call OMGAI_BuyGuide(u)
+    endfunction
+
+//---------------------------------------------------------------------------
 // 8. 锟斤拷锟斤拷
 //---------------------------------------------------------------------------
 

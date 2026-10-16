@@ -191,6 +191,7 @@ library OMGAIDispatcher requires OMGAICore, OMGAILog, OMGAIGuard, OMGAIBehaviors
             call OMGAI_AntiIdle(u)
             call OMGAI_SelectBehavior(u)
             call OMGAI_DispatchThink(OMGAICore_OMGAI_LoadInt(hid, 0), u)
+            call OMGAIBehaviors_OMGAI_BehaviorsAuxTick(u)
         endif
     endfunction
 

@@ -1,90 +1,90 @@
 //===========================================================================
-// OMGAIBehaviors.j  --  Dota OMG ³¬¼¶ AI 8 ¸öÐÐÎªÄ£¿é
-//   ¶ÔÓ¦·½°¸£º¡ì6£¨Desire ¹«Ê½ + Think ×´Ì¬»ú + ãÐÖµ±í£©
-//   ÒÀÀµ£ºOMGAICore, OMGAILog, OMGAISpellCast, OMGAITargetSel, OMGAIActionMask
-//   Ã¿¸öÄ£¿é = OMGAI_Desire<X>(unit)¡úreal + OMGAI_Think<X>(unit)
-//   ãÐÖµ¼¯ÖÐÔÚÎÄ¼þÍ·³£Á¿Çø£¨µ÷²ÎÈë¿Ú OMGAIConfig£©
+// OMGAIBehaviors.j  --  Dota OMG ï¿½ï¿½ï¿½ï¿½ AI 8 ï¿½ï¿½ï¿½ï¿½ÎªÄ£ï¿½ï¿½
+//   ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½6ï¿½ï¿½Desire ï¿½ï¿½Ê½ + Think ×´Ì¬ï¿½ï¿½ + ï¿½ï¿½Öµï¿½ï¿½ï¿½ï¿½
+//   ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½OMGAICore, OMGAILog, OMGAISpellCast, OMGAITargetSel, OMGAIActionMask
+//   Ã¿ï¿½ï¿½Ä£ï¿½ï¿½ = OMGAI_Desire<X>(unit)ï¿½ï¿½real + OMGAI_Think<X>(unit)
+//   ï¿½ï¿½Öµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½Í·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ OMGAIConfigï¿½ï¿½
 //===========================================================================
 
-library OMGAIBehaviors requires OMGAICore, OMGAILog, OMGAISpellCast, OMGAITargetSel, OMGAIActionMask
+library OMGAIBehaviors requires OMGAICore, OMGAILog, OMGAISpellCast, OMGAITargetSel, OMGAIActionMask, OMGAIStrategy
 
 //---------------------------------------------------------------------------
-// 0. ãÐÖµ³£Á¿£¨¼¯ÖÐ¿Éµ÷£©
+// 0. ï¿½ï¿½Öµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¿Éµï¿½ï¿½ï¿½
 //---------------------------------------------------------------------------
 
-    // ¶ÔÏß£¨¡ì6.1£©
+    // ï¿½ï¿½ï¿½ß£ï¿½ï¿½ï¿½6.1ï¿½ï¿½
     globals
     constant real FARM_DESIRE_BASE   = 0.50
-    constant real DENY_HP_THRESHOLD  = 0.49  // ·´²¹ãÐÖµ£¨D2 OpenHyperAI:160£©
+    constant real DENY_HP_THRESHOLD  = 0.49  // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Öµï¿½ï¿½D2 OpenHyperAI:160ï¿½ï¿½
     constant real DANGER_HERO_RANGE  = 800.0
-    // ´òÒ°£¨¡ì6.2£©
-    constant real JUNGLE_WINDOW_MIN  = 6.0   // ·ÖÖÓ
+    // ï¿½ï¿½Ò°ï¿½ï¿½ï¿½ï¿½6.2ï¿½ï¿½
+    constant real JUNGLE_WINDOW_MIN  = 6.0   // ï¿½ï¿½ï¿½ï¿½
     constant real JUNGLE_WINDOW_MAX  = 10.0
-    // gank£¨¡ì6.3£©
+    // gankï¿½ï¿½ï¿½ï¿½6.3ï¿½ï¿½
     constant real GANK_TARGET_HP     = 0.50
-    // ÍÆËþ£¨¡ì6.4£©
+    // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½6.4ï¿½ï¿½
     constant real PUSH_BASE          = 0.20
     constant real PUSH_TIME_START    = 12.0
-    // ÍÅÕ½£¨¡ì6.5£©
+    // ï¿½ï¿½Õ½ï¿½ï¿½ï¿½ï¿½6.5ï¿½ï¿½
     constant real TEAM_FIGHT_COUNT   = 5
-    // ³·ÍË£¨¡ì6.6£©
+    // ï¿½ï¿½ï¿½Ë£ï¿½ï¿½ï¿½6.6ï¿½ï¿½
     constant real RETREAT_HP_PCT     = 0.25
     constant real RETREAT_ENEMY_RANGE = 600.0
-    // »Ø¼Ò²¹¸ø£¨¡ì5.3 Ó²×´Ì¬ÓÃ£©
+    // ï¿½Ø¼Ò²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½5.3 Ó²×´Ì¬ï¿½Ã£ï¿½
     constant real HOME_HP_PCT        = 0.25
     constant real HOME_MANA_PCT      = 0.15
 
 //---------------------------------------------------------------------------
-// 1. ¶ÔÏß Farm£¨¡ì6.1£©
-//    ×´Ì¬»ú LANE¡úPUSH¡úDEFEND£»Desire = »ù´¡ + Ð¡±øÈ¨ÖØ - Î£ÏÕÐÞÕý
+// 1. ï¿½ï¿½ï¿½ï¿½ Farmï¿½ï¿½ï¿½ï¿½6.1ï¿½ï¿½
+//    ×´Ì¬ï¿½ï¿½ LANEï¿½ï¿½PUSHï¿½ï¿½DEFENDï¿½ï¿½Desire = ï¿½ï¿½ï¿½ï¿½ + Ð¡ï¿½ï¿½È¨ï¿½ï¿½ - Î£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 //---------------------------------------------------------------------------
 
     endglobals
     public function OMGAI_DesireFarm takes unit u returns real
         local real d = FARM_DESIRE_BASE
-        // µÐ·½Ð¡±ø¿É²¹Êý ¡Á 0.05£¨TODO: ±éÀúÏßÉÏÐ¡±ø¼ÆÊý£©
-        // ¼º·½Ð¡±øÊý ¡Á 0.02
-        // Î£ÏÕÐÞÕý£ºµÐÓ¢ÐÛ 800 ÄÚÇÒÎÒ·½ÁÓÊÆ ¡ú ½µ desire
-        // TODO: ÓÃ EnemyState ¼ÆËã
+        // ï¿½Ð·ï¿½Ð¡ï¿½ï¿½ï¿½É²ï¿½ï¿½ï¿½ ï¿½ï¿½ 0.05ï¿½ï¿½TODO: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        // ï¿½ï¿½ï¿½ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ 0.02
+        // Î£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¢ï¿½ï¿½ 800 ï¿½ï¿½ï¿½ï¿½ï¿½Ò·ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ desire
+        // TODO: ï¿½ï¿½ EnemyState ï¿½ï¿½ï¿½ï¿½
         return d
     endfunction
 
     public function OMGAI_ThinkFarm takes unit u returns nothing
         // TODO: FSM LANE/PUSH/DEFEND
-        // ²¹µ¶£ºÔ¤¹ÀÉËº¦ ¡Ý Ä¿±êµ±Ç°ÑªÁ¿£¨Ç°Ò¡+µ¯µÀ²¹³¥ t=2.0*attackPoint+dist/moveSpeed£©
-        // ·´²¹£º¼º·½Ð¡±ø < 49% ¡ú ¹¥»÷¼º·½Ð¡±ø
-        // ¿¨±ø£º¿ª¾Ö 30s ±øÏßÇÐÏßÄâºÏ
-        // ×ßÎ»·À¶¶£ºÄ¿±êµã±ä»¯ < 120 Âë²»¸ÄÃüÁî
-        // ÏûºÄ£º°´¾àÀë´øÑ¡¼¼ÄÜ£¨½ü/ÖÐ/Ô¶Èýµµ£©
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô¤ï¿½ï¿½ï¿½Ëºï¿½ ï¿½ï¿½ Ä¿ï¿½êµ±Ç°Ñªï¿½ï¿½ï¿½ï¿½Ç°Ò¡+ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ t=2.0*attackPoint+dist/moveSpeedï¿½ï¿½
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¡ï¿½ï¿½ < 49% ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð¡ï¿½ï¿½
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ 30s ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        // ï¿½ï¿½Î»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½ä»¯ < 120 ï¿½ë²»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        // ï¿½ï¿½ï¿½Ä£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ¡ï¿½ï¿½ï¿½Ü£ï¿½ï¿½ï¿½/ï¿½ï¿½/Ô¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         call OMGAILog_LOG_DEBUG("BEH", "Farm Think")
     endfunction
 
 //---------------------------------------------------------------------------
-// 2. ´òÇ®/´òÒ°£¨¡ì6.2£©
-//    TRAVELLING¡úNEAR¡úFARMING¡úSTACKING£»Ã¿·ÖÖÓ :55 ¶ÑÒ°ÊÂ¼þ
+// 2. ï¿½ï¿½Ç®/ï¿½ï¿½Ò°ï¿½ï¿½ï¿½ï¿½6.2ï¿½ï¿½
+//    TRAVELLINGï¿½ï¿½NEARï¿½ï¿½FARMINGï¿½ï¿½STACKINGï¿½ï¿½Ã¿ï¿½ï¿½ï¿½ï¿½ :55 ï¿½ï¿½Ò°ï¿½Â¼ï¿½
 //---------------------------------------------------------------------------
 
     public function OMGAI_DesireJungle takes unit u returns real
         local real d = 0.0
         local real t = OMGAICore_OMGAI_GetGameTime() / 60.0
-        // 6~10 ·ÖÖÓÒ°Çø»Æ½ðÆÚ ¡ú ÌáÉý
+        // 6~10 ï¿½ï¿½ï¿½ï¿½Ò°ï¿½ï¿½ï¿½Æ½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
         if t >= JUNGLE_WINDOW_MIN and t <= JUNGLE_WINDOW_MAX then
             set d = 0.4
         endif
-        // Éñ·ûÕù¶á£ºË¢ÐÂµ¹¼ÆÊ± <30s ÇÒ¾àÀë <5000 ¡ú +0.3
-        // TODO: Rune Ê±¼ä´°
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½á£ºË¢ï¿½Âµï¿½ï¿½ï¿½Ê± <30s ï¿½Ò¾ï¿½ï¿½ï¿½ <5000 ï¿½ï¿½ +0.3
+        // TODO: Rune Ê±ï¿½ä´°
         return d
     endfunction
 
     public function OMGAI_ThinkJungle takes unit u returns nothing
-        // TODO: TRAVELLING¡úNEAR¡úFARMING¡úSTACKING ×´Ì¬»ú£¨D2 adam3q£©
+        // TODO: TRAVELLINGï¿½ï¿½NEARï¿½ï¿½FARMINGï¿½ï¿½STACKING ×´Ì¬ï¿½ï¿½ï¿½ï¿½D2 adam3qï¿½ï¿½
         call OMGAILog_LOG_DEBUG("BEH", "Jungle Think")
     endfunction
 
 //---------------------------------------------------------------------------
-// 3. Gank£¨¡ì6.3£©
-//    Desire ËÄÌõ¼þ£ºÕ½Á¦²îÃÅ¼÷ / Âäµ¥(1200 Âë¶ÓÓÑ¡Ü1) / ¿É¼û / 70% Ëæ»úÃüÖÐ
-//    Think£ºASSEMBLE¡úROAMING¡úÄ¿±ê¶ªÊ§5sÖØËã
+// 3. Gankï¿½ï¿½ï¿½ï¿½6.3ï¿½ï¿½
+//    Desire ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ½ï¿½ï¿½ï¿½ï¿½ï¿½Å¼ï¿½ / ï¿½äµ¥(1200 ï¿½ï¿½ï¿½ï¿½Ñ¡ï¿½1) / ï¿½É¼ï¿½ / 70% ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+//    Thinkï¿½ï¿½ASSEMBLEï¿½ï¿½ROAMINGï¿½ï¿½Ä¿ï¿½ê¶ªÊ§5sï¿½ï¿½ï¿½ï¿½
 //---------------------------------------------------------------------------
 
         public function OMGAI_DesireGank takes unit u returns real
@@ -93,13 +93,13 @@ library OMGAIBehaviors requires OMGAICore, OMGAILog, OMGAISpellCast, OMGAITarget
         if target == null then
             return 0.0
         endif
-        // ÓÐÃëÉ±Ä¿±ê£¨FindKillTarget ÒÑÅÐ²ÐÑª+±¬·¢¹»£©¡ú »ù´¡ 0.7
+        // ï¿½ï¿½ï¿½ï¿½É±Ä¿ï¿½ê£¨FindKillTarget ï¿½ï¿½ï¿½Ð²ï¿½Ñª+ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ 0.7
         set d = 0.7
-        // Âäµ¥ + 0.2
+        // ï¿½äµ¥ + 0.2
         if OMGAITargetSel_OMGAI_IsLoneEnemy(target) then
             set d = d + 0.2
         endif
-        // Ëæ»úÃüÖÐ£¨70%£©
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð£ï¿½70%ï¿½ï¿½
         if GetRandomInt(1, 100) > 70 then
             set d = 0.0
         endif
@@ -118,25 +118,25 @@ library OMGAIBehaviors requires OMGAICore, OMGAILog, OMGAISpellCast, OMGAITarget
             return
         endif
         call OMGAICore_OMGAI_SaveReal(hid, 95, now)
-        // ÒÑÔÚ¹¥»÷Ä¿±êÔò²»·¢ÐÂÃüÁî£¨±ÜÃâ´ò¶Ï»ùÍ¼ AI£©
+        // ï¿½ï¿½ï¿½Ú¹ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½ï¿½ò²»·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½î£¨ï¿½ï¿½ï¿½ï¿½ï¿½Ï»ï¿½Í¼ AIï¿½ï¿½
         if GetUnitCurrentOrder(u) != OrderId("smart") then
             call IssueTargetOrder(u, "smart", target)
-            call OMGAILog_LOG_WARN("GANK", "¼¯»ð " + I2S(GetUnitTypeId(target)) + " hp%=" + R2S(GetUnitState(target, UNIT_STATE_LIFE) / GetUnitState(target, UNIT_STATE_MAX_LIFE)))
+            call OMGAILog_LOG_WARN("GANK", "ï¿½ï¿½ï¿½ï¿½ " + I2S(GetUnitTypeId(target)) + " hp%=" + R2S(GetUnitState(target, UNIT_STATE_LIFE) / GetUnitState(target, UNIT_STATE_MAX_LIFE)))
         endif
     endfunction
 
 //---------------------------------------------------------------------------
-// 4. ÍÆËþ/·ÀÊØ£¨¡ì6.4£©
+// 4. ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½Ø£ï¿½ï¿½ï¿½6.4ï¿½ï¿½
 //---------------------------------------------------------------------------
 
     public function OMGAI_DesirePush takes unit u returns real
         local real d = PUSH_BASE
         local real t = OMGAICore_OMGAI_GetGameTime() / 60.0
-        // 12 ·ÖÖÓºóËæÊ±¼äÏßÐÔÔö³¤
+        // 12 ï¿½ï¿½ï¿½Óºï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         if t > PUSH_TIME_START then
             set d = d + (t - PUSH_TIME_START) * 0.01
         endif
-        // Ëþ/±øÓª/¾­¼Ã²îÖðÏî¼Ó¼õ£¨TODO£©
+        // ï¿½ï¿½/ï¿½ï¿½Óª/ï¿½ï¿½ï¿½Ã²ï¿½ï¿½ï¿½ï¿½ï¿½Ó¼ï¿½ï¿½ï¿½TODOï¿½ï¿½
         if d > 0.8 then
             set d = 0.8
         endif
@@ -144,22 +144,22 @@ library OMGAIBehaviors requires OMGAICore, OMGAILog, OMGAISpellCast, OMGAITarget
     endfunction
 
     public function OMGAI_ThinkPush takes unit u returns nothing
-        // TODO: ÍÆÏß¼ÓÈ¨´ò·ÖÈ¡×î¸ßÂ·£¨D2 GetCommonPushLaneDesires£©
+        // TODO: ï¿½ï¿½ï¿½ß¼ï¿½È¨ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½Â·ï¿½ï¿½D2 GetCommonPushLaneDesiresï¿½ï¿½
         call OMGAILog_LOG_DEBUG("BEH", "Push Think")
     endfunction
 
     public function OMGAI_DesireDefend takes unit u returns real
-        // TODO: ¼º·½Ëþ±»¹¥»÷ ¡ú ÇóÔ®ÊÂ¼þ´¥·¢¸ß desire
+        // TODO: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½ï¿½Ô®ï¿½Â¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ desire
         return 0.0
     endfunction
 
     public function OMGAI_ThinkDefend takes unit u returns nothing
-        // TODO: DEFEND_Tower¡úClearWave¡úReturn ×´Ì¬»ú£¨D1 aiDefTowerAttack£©
+        // TODO: DEFEND_Towerï¿½ï¿½ClearWaveï¿½ï¿½Return ×´Ì¬ï¿½ï¿½ï¿½ï¿½D1 aiDefTowerAttackï¿½ï¿½
         call OMGAILog_LOG_DEBUG("BEH", "Defend Think")
     endfunction
 
 //---------------------------------------------------------------------------
-// 5. ÍÅÕ½£¨¡ì6.5£©
+// 5. ï¿½ï¿½Õ½ï¿½ï¿½ï¿½ï¿½6.5ï¿½ï¿½
 //---------------------------------------------------------------------------
 
         public function OMGAI_DesireTeam takes unit u returns real
@@ -183,7 +183,7 @@ library OMGAIBehaviors requires OMGAICore, OMGAILog, OMGAISpellCast, OMGAITarget
             return
         endif
         call OMGAICore_OMGAI_SaveReal(hid, 96, now)
-        // °´½ÇÉ«Õ¾Î»£ºÌ¹¿Ë(2)ÌùÇ° / ½üÕ½(1)ÖÐ / ·¨Ê¦¸¨Öú(3/4)À­ºó / ÆäËûÖÐ
+        // ï¿½ï¿½ï¿½ï¿½É«Õ¾Î»ï¿½ï¿½Ì¹ï¿½ï¿½(2)ï¿½ï¿½Ç° / ï¿½ï¿½Õ½(1)ï¿½ï¿½ / ï¿½ï¿½Ê¦ï¿½ï¿½ï¿½ï¿½(3/4)ï¿½ï¿½ï¿½ï¿½ / ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         if role == 2 then
             set want = 350.0
         elseif role == 1 then
@@ -196,22 +196,22 @@ library OMGAIBehaviors requires OMGAICore, OMGAILog, OMGAISpellCast, OMGAITarget
             set dy = GetUnitY(u) - GetUnitY(target)
             set dist = SquareRoot(dx * dx + dy * dy)
             if dist > want + 200.0 and dist > 1.0 then
-                // Ì«Ô¶£ºÏòÄ¿±ê¿¿½üµ½ want ¾àÀë
+                // Ì«Ô¶ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ê¿¿ï¿½ï¿½ï¿½ï¿½ want ï¿½ï¿½ï¿½ï¿½
                 call IssuePointOrder(u, "move", GetUnitX(target) + dx / dist * want, GetUnitY(target) + dy / dist * want)
             elseif dist < want - 200.0 and dist > 1.0 then
-                // Ì«½ü£ººó³·À­¿ª
+                // Ì«ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
                 call IssuePointOrder(u, "move", GetUnitX(u) + dx / dist * 250.0, GetUnitY(u) + dy / dist * 250.0)
             endif
-            // ¼¯»ð
+            // ï¿½ï¿½ï¿½ï¿½
             if GetUnitCurrentOrder(u) != OrderId("smart") then
                 call IssueTargetOrder(u, "smart", target)
             endif
         endif
-        call OMGAILog_LOG_WARN("TEAM", "ÍÅÕ½Õ¾Î» role=" + I2S(role) + " want=" + R2S(want))
+        call OMGAILog_LOG_WARN("TEAM", "ï¿½ï¿½Õ½Õ¾Î» role=" + I2S(role) + " want=" + R2S(want))
     endfunction
 
 //---------------------------------------------------------------------------
-// 6. ³·ÍË£¨¡ì6.6£©
+// 6. ï¿½ï¿½ï¿½Ë£ï¿½ï¿½ï¿½6.6ï¿½ï¿½
 //---------------------------------------------------------------------------
 
     public function OMGAI_DesireRetreat takes unit u returns real
@@ -220,7 +220,7 @@ library OMGAIBehaviors requires OMGAICore, OMGAILog, OMGAISpellCast, OMGAITarget
         if hpPct < RETREAT_HP_PCT then
             return 1.0
         endif
-        // TODO: µÐ·½ÍþÐ² top1 ¾à < 300 ÇÒÎÒ·½Ñª < 40%
+        // TODO: ï¿½Ð·ï¿½ï¿½ï¿½Ð² top1 ï¿½ï¿½ < 300 ï¿½ï¿½ï¿½Ò·ï¿½Ñª < 40%
         return 0.0
     endfunction
 
@@ -237,18 +237,18 @@ library OMGAIBehaviors requires OMGAICore, OMGAILog, OMGAISpellCast, OMGAITarget
         call OMGAICore_OMGAI_SaveReal(hid, 97, now)
         set fx = GetStartLocationX(GetPlayerStartLocation(p))
         set fy = GetStartLocationY(GetPlayerStartLocation(p))
-        // ËÀÍö»òÒÑ»Ø¼ÒÔò²»ÖØ¸´·¢ÃüÁî
+        // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ»Ø¼ï¿½ï¿½ï¿½ï¿½Ø¸ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         if not UnitAlive(u) then
             return
         endif
         if GetUnitCurrentOrder(u) != OrderId("move") or OMGAICore_OMGAI_LoadInt(hid, 97) == 0 then
             call IssuePointOrder(u, "move", fx, fy)
-            call OMGAILog_LOG_WARN("RETR", "µÍÑª³·ÍË hp%=" + R2S(GetUnitState(u, UNIT_STATE_LIFE) / GetUnitState(u, UNIT_STATE_MAX_LIFE)))
+            call OMGAILog_LOG_WARN("RETR", "ï¿½ï¿½Ñªï¿½ï¿½ï¿½ï¿½ hp%=" + R2S(GetUnitState(u, UNIT_STATE_LIFE) / GetUnitState(u, UNIT_STATE_MAX_LIFE)))
         endif
     endfunction
 
 //---------------------------------------------------------------------------
-// 7. ÊÓÒ°/²åÑÛ£¨¡ì6.7£©
+// 7. ï¿½ï¿½Ò°/ï¿½ï¿½ï¿½Û£ï¿½ï¿½ï¿½6.7ï¿½ï¿½
 //---------------------------------------------------------------------------
 
         public function OMGAI_DesireWard takes unit u returns real
@@ -264,25 +264,30 @@ library OMGAIBehaviors requires OMGAICore, OMGAILog, OMGAISpellCast, OMGAITarget
         local integer hid = GetHandleId(u)
         local real now = OMGAICore_OMGAI_GetGameTime()
         local real last = OMGAICore_OMGAI_LoadReal(hid, 98)
+        local unit ward = null
         if now - last < 60.0 then
             return
         endif
         call OMGAICore_OMGAI_SaveReal(hid, 98, now)
-        // ·´ÑÛ£ºStrategy ±ê¼ÇµÄ¿ÉÒÉÑÛÎ»£¨²Û 92£©¡ú ÈÕÖ¾ÌáÊ¾
-        if OMGAICore_OMGAI_LoadInt(hid, 92) != 0 then
-            call OMGAILog_LOG_WARN("WARD", "·´ÑÛ£º¿ÉÒÉÑÛÎ»ÒÑ±ê¼Ç£¬´ýÕæÑÛ·´ÖÆ")
+        // ï¿½æ·´ï¿½Û£ï¿½ï¿½ï¿½ï¿½È¶ï¿½ï¿½ï¿½ 92 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê§Ð§ï¿½ò¶µµï¿½É¨ï¿½ï¿½
+        set ward = OMGAICore_OMGAI_LoadUnitHandle(hid, 92)
+        if ward == null or not UnitAlive(ward) or not IsUnitEnemy(ward, GetOwningPlayer(u)) then
+            set ward = OMGAIStrategy_OMGAI_GetWardToDeWard(u)
         endif
-        // ÊÓÒ°¼ì²é£¨»ùÍ¼ÊØÎÀÎïÆ·¶Ô½ÓºóÐø°æ±¾£¬ÏÈ¼ÇÈÕÖ¾£©
-        call OMGAILog_LOG_WARN("WARD", "ÊÓÒ°´°¿Ú£º²åÑÛ/·´ÑÛÑ²¼ì")
+        if ward != null then
+            call IssueTargetOrder(u, "smart", ward)
+            call OMGAILog_LOG_WARN("WARD", "ï¿½ï¿½ï¿½Û£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð·ï¿½ï¿½ï¿½ï¿½ï¿½ type=" + I2S(GetUnitTypeId(ward)))
+        endif
+        call OMGAILog_LOG_WARN("WARD", "ï¿½ï¿½Ò°ï¿½ï¿½ï¿½Ú£ï¿½ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½Ñ²ï¿½ï¿½")
     endfunction
 
 //---------------------------------------------------------------------------
-// 8. ¹¤¾ß
+// 8. ï¿½ï¿½ï¿½ï¿½
 //---------------------------------------------------------------------------
 
 
     public function OMGAI_BehaviorsInit takes nothing returns nothing
-        call OMGAILog_LOG_INFO("BEH", "OMGAIBehaviors ³õÊ¼»¯Íê³É")
+        call OMGAILog_LOG_INFO("BEH", "OMGAIBehaviors ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½")
     endfunction
 
 endlibrary

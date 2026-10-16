@@ -65,11 +65,11 @@ print('base main at line', main_line + 1, 'endfunction at line', end_line + 1)
 
 # 3) 组装
 init_calls = [
-    'call ExecuteFunc("jasshelper__initstructs95609718")',
+    'call ExecuteFunc("jasshelper__initstructs98038640")',
     'call ExecuteFunc("OMGAIGameMode___OnInit")',
     'call ExecuteFunc("OMGAIStateCleaner_Init")',
     'call ExecuteFunc("OMGAISkillData___Init")',
-    'call ExecuteFunc("OMGAIInit__OnInit")',
+    'call ExecuteFunc("OMGAIInit___OnInit")',
     'call OMGAISuperAIInit_OMGAI_InitAll()',
 ]
 head = '\n'.join(txt_lines[:main_line])

@@ -458,6 +458,37 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
 
     // 针对出装：按 EnemyState 对位 Build 返回反制装备栏位（出装系统对接后启用）
     public function OMGAI_CounterBuild takes unit u returns integer
+        local player p = GetOwningPlayer(u)
+        local group g = CreateGroup()
+        local unit e = null
+        local integer phys = 0
+        local integer mag = 0
+        local integer b = 0
+        // 统计周围 2000 码敌方英雄流派
+        call GroupEnumUnitsInRange(g, GetUnitX(u), GetUnitY(u), 2000.0, null)
+        set e = FirstOfGroup(g)
+        loop
+            exitwhen e == null
+            if IsUnitType(e, UNIT_TYPE_HERO) and UnitAlive(e) and IsUnitEnemy(e, p) then
+                set b = OMGAI_GetBuild(e)
+                if b == BUILD_PHYS then
+                    set phys = phys + 1
+                elseif b == BUILD_MAGIC then
+                    set mag = mag + 1
+                endif
+            endif
+            call GroupRemoveUnit(g, e)
+            set e = FirstOfGroup(g)
+        endloop
+        call DestroyGroup(g)
+        set g = null
+        set e = null
+        // 克制决策：敌方物理流多 -> 1(物理抗性)；法师流多 -> 2(法抗)；均衡 -> 0(默认)
+        if phys >= mag and phys > 0 then
+            return 1
+        elseif mag > phys then
+            return 2
+        endif
         return 0
     endfunction
 
@@ -473,7 +504,56 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
 
     // 反眼目标：返回视野内最近的敌方守卫（守卫类型库对接后启用；V2.4 保守返回 null）
     public function OMGAI_GetWardToDeWard takes unit u returns unit
-        return null
+        local player p = GetOwningPlayer(u)
+        local group g = CreateGroup()
+        local unit ward = null
+        local unit tmp = null
+        // 扫描 1400 码：敌方、存活、非英雄非建筑、带守卫特征技能 A04R
+        call GroupEnumUnitsInRange(g, GetUnitX(u), GetUnitY(u), 1400.0, null)
+        set tmp = FirstOfGroup(g)
+        loop
+            exitwhen tmp == null
+            if not IsUnitType(tmp, UNIT_TYPE_HERO) and not IsUnitType(tmp, UNIT_TYPE_STRUCTURE) and UnitAlive(tmp) and IsUnitEnemy(tmp, p) and GetUnitAbilityLevel(tmp, 'A04R') > 0 then
+                set ward = tmp
+                exitwhen true
+            endif
+            call GroupRemoveUnit(g, tmp)
+            set tmp = FirstOfGroup(g)
+        endloop
+        call DestroyGroup(g)
+        set g = null
+        set tmp = null
+        return ward
+    endfunction
+
+    // 反眼链路：扫描附近敌守卫 -> 存槽 92（AI 英雄），ThinkWard 消费
+    public function OMGAI_DetectWards takes unit u returns nothing
+        local integer hid = GetHandleId(u)
+        local player p = GetOwningPlayer(u)
+        local group g = CreateGroup()
+        local unit tmp = null
+        local unit ward = null
+        call GroupEnumUnitsInRange(g, GetUnitX(u), GetUnitY(u), 1400.0, null)
+        set tmp = FirstOfGroup(g)
+        loop
+            exitwhen tmp == null
+            if not IsUnitType(tmp, UNIT_TYPE_HERO) and not IsUnitType(tmp, UNIT_TYPE_STRUCTURE) and UnitAlive(tmp) and IsUnitEnemy(tmp, p) and GetUnitAbilityLevel(tmp, 'A04R') > 0 then
+                set ward = tmp
+                exitwhen true
+            endif
+            call GroupRemoveUnit(g, tmp)
+            set tmp = FirstOfGroup(g)
+        endloop
+        call DestroyGroup(g)
+        if ward != null then
+            call OMGAICore_OMGAI_SaveUnitHandle(hid, 92, ward)
+            call OMGAILog_LOG_WARN("WARD", "发现敌方守卫 type=" + I2S(GetUnitTypeId(ward)))
+        else
+            call OMGAICore_OMGAI_SaveUnitHandle(hid, 92, null)
+        endif
+        set g = null
+        set tmp = null
+        set ward = null
     endfunction
 
     // 开雾判断：有秒杀目标且目标不可见 -> 建议开雾
@@ -513,6 +593,7 @@ library OMGAIStrategy requires OMGAICore, OMGAILog, OMGAIEnemyState, OMGAITarget
         call OMGAICore_OMGAI_SaveReal(hid, 99, now)
         call OMGAI_FindKillTarget(u)
         call OMGAI_AmbushThink(u)
+        call OMGAI_DetectWards(u)
         // 团战标记（槽 93 = 1 团战中）：供 Behaviors DesireTeam 读取，避免高频枚举
         if OMGAITargetSel_OMGAI_IsTeamFight(u) then
             call OMGAICore_OMGAI_SaveInt(hid, 93, 1)

@@ -1,0 +1,21 @@
+# 二进制/大文件
+*.w3x
+*.mpq
+*.exe
+*.dll
+
+# 编译/打包产物
+merged_*.j
+*.compiled.j
+temp_*
+
+# 本地环境/敏感
+w3_reg_backup.json
+add_excl*.ps1
+*.png
+*.bak
+*.realbak
+
+# Python
+__pycache__/
+*.pyc

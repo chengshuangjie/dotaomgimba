@@ -75,7 +75,7 @@ library OMGAILearn requires OMGAICore, OMGAILog
     public function OMGAI_LearnLoad takes string key, real sco, integer nbs, integer mis returns nothing
         local string s = ""
         local integer i1 = 0
-        local integer i2 = 0
+        local integer i2_learn = 0
         local string tail = ""
         set s = GetStoredString(LEARN_CACHE, "learn", key)
         if s != "" then
@@ -83,10 +83,10 @@ library OMGAILearn requires OMGAICore, OMGAILog
             if i1 > 0 then
                 set sco = S2R(SubString(s, 0, i1))
                 set tail = SubString(s, i1 + 1, StringLength(s))
-                set i2 = OMGAILearn___LEARN_FindChar(tail, "|")
-                if i2 > 0 then
-                    set nbs = S2I(SubString(tail, 0, i2))
-                    set mis = S2I(SubString(tail, i2 + 1, StringLength(tail)))
+                set i2_learn = OMGAILearn___LEARN_FindChar(tail, "|")
+                if i2_learn > 0 then
+                    set nbs = S2I(SubString(tail, 0, i2_learn))
+                    set mis = S2I(SubString(tail, i2_learn + 1, StringLength(tail)))
                 endif
             endif
         endif
@@ -212,12 +212,12 @@ library OMGAILearn requires OMGAICore, OMGAILog
         endif
         set bias = (sco - 50.0) / 100.0
         return bias
+    endfunction
 
     // v0.11: 施法决策查询——拼 key 返回 bias（供 SpellCast 消费）
     public function OMGAI_LearnBiasForCast takes unit u, integer abilityId returns real
         local string key = LEARN_MakeKey("hero", abilityId, OMGAILearn_OMGAI_LearnContext(u))
         return OMGAILearn_OMGAI_LearnPriorityBias(key)
-    endfunction
     endfunction
 
 //---------------------------------------------------------------------------
